@@ -1,0 +1,10 @@
+---
+title: "Lab1"
+author: "jche827"
+date: "30/07/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+```

@@ -1,0 +1,354 @@
+---
+title: "Lab3"
+author: "jche827"
+date: "12/08/2021"
+output: html_document
+---
+
+# The Data Set
+
+The data source for this lab is a set of 31 CSV files containing 15-minute vehicle counts from January 2013 to September 2020. 
+The rows within these CSV files are similar to the rows in the CSV file from Lab Zero and Lab 01 ie. vehicle class, start time, end time, count etc. 
+# Tasks
+
+## 1. Write a shell command that shows the size of each of the 31 CSV files 
+
+```{bash}
+# show sizes of all files ending with *TMSTrafficQuarterHour.csv in our directory
+du -ah /course/NZTA/*TMSTrafficQuarterHour.csv
+```
+## ...and the total size of all 31 files
+```{bash}
+# find total size of 31 files
+find /course/NZTA -type f -name '*_TMSTrafficQuarterHour.csv' -exec du -ch {} + | grep total$
+```
+
+The total size of the 31 csv files in this directory is 20GB
+
+## 2. Write a shell command that shows the amount of RAM available on one of the virtual machines.
+
+```{bash}
+free -g
+```
+There is currently 186gb available (as of 12/08/2020 4:00pm)
+
+### How does this compare to Ubuntu?
+
+Running the same line on the Ubuntu rstudio results in:
+
+total = 15
+
+used = 3
+
+free = 8
+
+shared = 0
+
+buff/cache = 3
+
+available = 11
+
+Ubuntu only has ~15gb RAM total, but the VM has 196gb total RAM.
+
+### how does this RAM amount compare to the csv files?
+
+The csv files total 20gb, but the flexit Ubuntu computers only have 15gb in RAM, which is not enough to load all 31 csv files.
+
+# Import 
+
+## 3. Read the first csv file and measure the size of the data frame that is created AND measure the total amount of memory that R used.
+
+```{r}
+library('profmem')
+p1 <- profmem({
+  # read the csv into our dataframe
+  countsDF <- read.csv('/course/NZTA/20130101_20130331_TMSTrafficQuarterHour.csv')
+})
+
+
+head(countsDF)
+```
+
+```{r}
+
+# find size of countsDF in mbs
+print(object.size(countsDF), units = "Mb")
+
+# find memory usage in R
+total(p1)
+```
+~2.5gb of memory used
+
+## 4 Repeat the previous task using a data table and note any differences.
+
+```{r}
+library(data.table)
+p2 <- profmem({
+  # using a data table insted of a dataframe this time
+  countsDT <- data.table::fread('/course/NZTA/20130101_20130331_TMSTrafficQuarterHour.csv')
+})
+head(countsDT)
+```
+
+```{r}
+# find size of countsDT in mbs
+print(object.size(countsDT), units = "Mb")
+
+# find memory usage in R
+total(p2)
+```
+~0.5 gb of memory used
+
+
+
+These results tell us: both the dataframe and the data table are of object size 445.6 Mbs. 
+
+However, there is a drastic difference in the memory usage for these 2 commands, which is also evident in the runtimes. A dataframe consists of an excessive amount of alloc (allocation); then read.table(); then scan() and finally type.convert() actions (found by calling the entire profmem() function). A data table requires a lot less alloc actions in the memory. A dataframe for this csv requires 2.5gb whereas a data table requires 0.5gb.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Transform
+## 5. Calculate daily counts from the 15-min counts in several different ways.
+
+### naive “standard R” approach
+
+```{r}
+p3 <-  profmem({
+# code from questions
+countsDF$day <- as.Date(countsDF$startDatetime, format="%d-%b-%Y")
+dailyCountsDF <- aggregate(countsDF["count"], 
+                           countsDF[c("day", "siteRef", "class")],
+                           sum)
+})
+head(dailyCountsDF)
+
+#find total memory used for naive standard R approach
+total(p3)
+
+```
+~8.5gb used
+
+### data table
+
+```{r}
+p4 <- profmem({
+dailyCountsDT <- countsDT[, day := as.Date(startDatetime, format="%d-%b-%Y")][, sum(count), .(day, siteRef, class)]
+})
+head(dailyCountsDT)
+
+#find total memory used for data table apprach
+total(p4)
+```
+~1.2gb of memory used
+
+### shell script approach - memory used
+```{bash}
+/usr/bin/time -f "%M" \
+awk -F, 'NR > 1 {gsub(/ .+/,"",$3); print $1","$2","$3", "$6}' /course/NZTA/20130101_20130331_TMSTrafficQuarterHour.csv | sort -t, -k1,1 -k2,2 -k3,3 | awk '{a[$1]+=$2}END{for (i in a) print i,a[i]}' > /dev/null
+```
+
+~4000kbs memory used
+
+
+
+
+
+
+
+
+## showing all 3 methods produce the same result
+
+### number of rows in the dataframe
+
+```{r}
+dim(dailyCountsDF)
+```
+
+### number of rows in the data table
+
+```{r}
+dim(dailyCountsDT)
+```
+
+### number of rows from the bash command pipeline
+```{bash}
+awk -F, 'NR > 1 {gsub(/ .+/,"",$3); print $1","$2","$3", "$6}' /course/NZTA/20130101_20130331_TMSTrafficQuarterHour.csv | sort -t, -k1,1 -k2,2 -k3,3 | awk '{a[$1]+=$2}END{for (i in a) print i,a[i]}' | wc -l
+```
+
+All 3 methods contain 72157 rows
+
+
+### head of the sorted dataframe
+```{r}
+head(dailyCountsDF[order(dailyCountsDF$count),])
+```
+
+### head of the sorted data table
+```{r}
+head(dailyCountsDT[order(dailyCountsDT$V1),])
+```
+
+
+### head of the sorted bash command pipeline
+```{bash}
+awk -F, 'NR > 1 {gsub(/ .+/,"",$3); print $1","$2","$3", "$6}' /course/NZTA/20130101_20130331_TMSTrafficQuarterHour.csv | sort -t, -k1,1 -k2,2 -k3,3 | awk '{a[$1]+=$2}END{for (i in a) print i,a[i]}' | sort -k2 -n| head
+```
+
+All methods show the same sorted head and number of rows, so we can assume they all produce the same result. Each of the methods produces the same head (with minor differences such as "V1" contains the counts for the data table, the order of columns in the shell script...)
+
+
+
+# Model
+
+## 7. Create a new variable scount that is the square-root of the count.
+
+```{r}
+dailyCountsDF$scount <- sqrt(dailyCountsDF$count)
+head(dailyCountsDF)
+```
+
+## 8. Split the data into training (90%) and test (10%) sets and fit two models using the training data: one that predicts scount from the overall mean of scount and one that predicts scount from class. 
+
+### Defining the RMSE function
+
+```{r}
+RMSE <- function(obs, pred) {
+  sqrt(mean((obs - pred)^2))
+}
+```
+
+
+```{r}
+# 10:90 test train split
+index <- sample(rep(1:10, length.out=nrow(dailyCountsDF)))
+test <- dailyCountsDF[index == 1,]
+train <- dailyCountsDF[index > 1,]
+
+# scount from overall mean of scount in training set
+obs <- test$scount
+p5 <- profmem({
+smean <- mean(train$scount)
+})
+
+# scount from class
+p6 <- profmem({
+lmfit1 <- lm(scount ~ class, train)
+})
+
+sclass <- predict(lmfit1, test)
+```
+### Calculate the RMSE for both models.
+
+Comparing the performance of these two models by their RMSE outputs. 
+
+```{r}
+# RMSE value for scount from overall mean of scount
+RMSE(obs, smean)
+# RMSE value of scount from class
+RMSE(obs, sclass)
+```
+
+## Measure the memory allocated during the model fit and compare it to the size of the data.
+
+```{r}
+# memory usage fitting the scount with mean scounts
+total(p5)
+```
+Around 2300 bytes
+```{r}
+# memory usage fitting the scount with class
+total(p6)
+```
+around 15mbs.
+
+```{r}
+# find size of the data
+print(object.size(dailyCountsDF), units = "Mb")
+```
+The size of the data is ~3mbs
+
+The memory allocated fitting the data with scount and class is 15mbs, which is around 5 times larger than the size of the data (~3mbs). 
+
+
+## 9. Calculate the size of the model matrix for the model with class as the predictor.
+```{r}
+print(object.size(model.matrix(lm(scount ~ class, train))), units = "Mb")
+```
+
+
+## Calculate the size of the model matrix for a model with class and siteRef as predictors. Can you explain why this is so much bigger than the model matrix with just class?
+
+```{r}
+p7 <- profmem({
+lmfit2 <- lm(scount ~ class+siteRef, train)
+})
+
+total(p7)
+```
+~1.5gb
+```{r}
+# calculate model size
+print(object.size(model.matrix(lm(scount ~ class+siteRef, train))), units = "Mb")
+```
+
+
+
+The model with siteref is so much bigger than the model matrix with just class due to siteref having many more different values compared to class. When we are only predicting on a model with class, there are only 2 classes (H and L). When we add siteref as a dimension, there will be hundreds-thousands more dimensions our linear model has to fit. This drastically increases the size and allocated memory from R. 
+
+
+## 10. This analysis only uses ONE of the CSV files for the data set. Given the memory requirements from previous tasks, would it be possible to conduct an analysis with a model that predicts scount from class and siteRef on all 31 of the CSV files at once (on the VM)?
+
+The VM has a total of 196gb RAM total, so if we had 31 times more data in our model, we would have 31 * 1.5gb model (predicting on class and siteref) which equals ~20gb. This means conducting a 31 csv analysis is completely feasible on the virtual machines when adding siteref to class, but not so feasible on the Ubuntu machines.  
+
+## Describe an approach that would require less memory to perform that analysis.
+
+To utilize less memory to perform the analysis, we can use the biglm function instead of lm(). 
+The biglm package can be used to perform an analysisincrementally on chunks of data.
+
+For example:
+
+
+fit <- biglm(formula, someData)
+
+update(fit, moreData)
+
+fit <- bigglm(formula, dataFunction)
+
+By splitting the data into chunks, we can perform the analysis while requiring less data. 
+
+
+
+## 11. Create a plot that shows the predictions of both models against the data.
+```{r}
+plot(scount ~ jitter(as.numeric(factor(class))), test,
+     xlab="class", axes=FALSE)
+axis(2)
+axis(1, at=as.numeric(unique(factor(test$class))),
+     label=unique(factor(test$class)))
+abline(h=smean, col="green")
+points(as.numeric(unique(factor(test$class))), 
+       predict(lmfit1, data.frame(class=unique(factor(test$class)))),
+       pch=16, col="red")
+```
+
+# Summary
+
+In this lab, we started with bash commands on the directory in our virtual machines at /course/NZTA. This directory included our 31 csv files which we will be using for the rest of the lab. We did operations such as free -g to check RAM, and du to see sizes of the files/directories. 
+
+We then used the 1st csv file, 20130101_20130331_TMSTrafficQuarterHour.csv to see the sizes of dataframes and data tables it would create. We used profmem() to profile the memory allocation of different methods, including shell script. We measured the memory allocation of creating new dataframes (dailyCountsDF) and memory usage of fitting models. 
