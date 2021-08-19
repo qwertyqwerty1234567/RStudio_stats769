@@ -1,0 +1,203 @@
+---
+title: "Lab1"
+author: "jche827"
+date: "30/07/2021"
+output: html_document
+---
+
+# The Data Set
+
+The data are counts of vehicles at different locations on state highways across New Zealand on August 8 2020.
+Other variables such as time, and vehicle class are included.
+
+```{bash echo=FALSE}
+head lab01.csv
+```
+
+# tasks
+## linux
+### 1. create a directory to hold the files for this lab and show the Linux command to navigate to that directory.
+
+linux commands:
+
+make directory called lab1:
+
+mkdir lab1
+
+change directory to this new directory:
+
+cd lab1 
+
+(since we're already in the correct directory, we only need to cd into our newly created dir and not the entire path from ~/shared/myhome ...)
+
+### 2. Write a shell command that shows the size of the data file.
+```{bash}
+# show counts of lines, words and characters in lab01.csv
+wc lab01.csv 
+# show the number of lines in the csv
+wc -l lab01.csv
+```
+### 3.Use grep to find rows that contain 08-AUG-2020 and use wc to count how many rows there are of that sort.
+```{bash}
+# counting number of lines which include "08-AUG-2020" using grep
+grep "08-AUG-2020" lab01.csv | wc -l
+```
+### Is this the same number of rows as the CSV file from Lab Zero? If not, what is the difference?
+
+Lab 0' had the same number of lines in the csv. 
+
+### 4. Use awk to extract rows for which the start date is August 8th 2020.
+```{bash}
+# looping through the dataset to find line count of start date = "08-AUG-2020", which is our 3rd column 
+awk -F, -e '$3 ~ /08-AUG-2020./  { print }' lab01.csv | wc -l
+```
+### Is this the same number of rows as the previous question? If not, show an example of a line that is different. 
+
+140152 is smaller than the value from q3. This is because it only considers start times on the 8th August, but not end times. So an example of a difference is on line 367 of the csv. A car starts at 7th Aug 23:45 and ends on the 8th at 00:00. This would not be included in q4 as the starttime does not satisfy the filter, but would satisfy q3 as the endtime is on the 8th.
+
+### 5. Write a single shell command that returns all unique values of the vehicle class from the file.
+
+```{bash}
+# finding all unique types of our 1st column, the class.
+awk -F, -e '{print $1}' lab01.csv | sort | uniq
+```
+### Are there any other values than H and L?
+
+no, there are only H and L
+
+### 6. Write shell commands to create a new file called August8.csv that just contains rows that start on August 8th 2020 plus has a first row containing column headers.
+
+```{bash}
+# finding all lines on the 8th aug, or if its the header line, then adding them into August.csv
+awk -F, -e '$3 ~ /08-AUG-2020./;{if(NR==1) print}' lab01.csv > August8.csv
+```
+```{bash}
+head August8.csv
+```
+```{bash}
+wc -l August8.csv
+```
+## Import
+### 7. Read the CSV file called August8.csv into R.
+```{r}
+# traffic is the new dataframe with data from August.csv
+traffic <- read.csv("August8.csv")
+head(traffic)
+```
+```{r}
+dim(traffic)
+```
+
+### 8. Create a subset of the data frame that just contains rows with a start time between 8am and 6pm inclusive.
+### Also create a new variable scount that is the square root of the count variable.
+
+```{r}
+# by converting the `startDatetime` to a `POSIXlt` object, rather than just a character vector.  This allows us to look at the day-of-the-month for each `startDatetime`
+traffic$start <- as.POSIXlt(traffic$startDatetime,
+                               format="%d-%b-%Y %H:%M")
+
+# subsetting lines to filter between 8am and 6pm inclusive.
+x <- subset(traffic, start$hour >= 8 & format(start, "%H:%M") <= "18:00")
+
+# creating sqcount
+x$scount <- sqrt(x$count)
+head(x)
+```
+```{r}
+# show the dimensions of our new data frame
+dim(x)
+```
+this line proves we've added the 2 new columns, and have filtered out the correct number of rows
+
+## Model
+### 9. Divide the data frame from the previous question into a test set (10%) and a training set (90%)
+
+```{r}
+index <- sample(rep(1:10, length.out=nrow(x)))
+train <- x[index > 1, ]
+test <- x[index == 1, ]
+```
+
+### Fit a linear model that predicts scount from class and another model that predicts scount from class and siteRef.
+
+```{r}
+# scount from class
+obs <- test$scount
+lmfit <- lm(scount ~ class, train)
+predLM <- predict(lmfit, test)
+
+# scount from class and siteref
+lmfit1 <- lm(scount ~ class + siteRef, train)
+predLM1 <- predict(lmfit1, test)
+```
+### Calculate the RMSE for both models.
+
+Defining a simple `RMSE()` function
+
+```{r}
+RMSE <- function(obs, pred) {
+  sqrt(mean((obs - pred)^2))
+}
+```
+
+Comparing the performance of these two models by their RMSE outputs. 
+
+```{r}
+RMSE(obs, predLM)
+```
+```{r}
+RMSE(obs, predLM1)
+```
+
+Including siteref improved the model as shown in the lower RMSE() output
+
+## Visualise
+### 10. Produce a visualisation that shows how the predictions of the models compare with the vehicle counts in the test data set.
+
+We split the data by class (H and L) to display them seperately
+```{r}
+# divide test data into classH and classL
+testL = subset(test, class=="L")
+testH = subset(test, class=="H")
+```
+
+```{r}
+plot(scount ~ as.numeric(factor(siteRef)), testH, xlab="siteRef", axes=FALSE)
+axis(2)
+axis(1, at=as.numeric(unique(factor(testH$siteRef))), label=unique(factor(testH$siteRef)), las=2)
+points(as.numeric(unique(factor(testH$siteRef))), predict(lmfit1, data.frame(siteRef=unique(factor(testH$siteRef)), class=rep("H", length(unique(factor(testH$siteRef)))))), pch=16, col="red")
+
+```
+
+
+
+This model shows a lot of variablility in the predictions
+```{r}
+plot(scount ~ as.numeric(factor(siteRef)), testL, xlab="siteRef", axes=FALSE)
+axis(2)
+axis(1, at=as.numeric(unique(factor(testL$siteRef))), label=unique(factor(testL$siteRef)), las=2)
+points(as.numeric(unique(factor(testL$siteRef))), predict(lmfit1, data.frame(siteRef=unique(factor(testL$siteRef)), class=rep("L", length(unique(factor(testL$siteRef)))))), pch=16, col="red")
+
+```
+
+
+
+
+This model performs better than the previous one. 
+
+### Can you suggest a better model based on this plot?
+
+the model can be improved by mulitplying the siteref with class instead of additively. 
+```{r}
+## caluculate RMSE for the new model
+
+lmfit3 <- lm(scount ~ class * siteRef, train)
+predLM3 <- predict(lmfit3, test)
+RMSE(obs, predLM3)
+```
+
+The prediction is better than both plots above, as shown by the better RMSE value.
+
+## Summary
+
+In this lab, we started by creating a directory and observing the data. Data size was shown and we used a filtering method to filter only for 08-AUG-2020. We then compare this with finding all start times at 08-AUG-2020 and realized it was smaller. This is because some data can be lost in the case than a car starts on the 7th and night, and ends on the 8th after 00:00. This shows us the importance of carefully using functions to make sure we get values we want and not miss information due to special cases such as this (driving between days). We find which classes of cars there are (H and L) and created a new csv containing specific information. We then used R dataframes to transform our data by adding columns and modelled our data based on a RMSE function. We then visualized the results and drew conclusions on which method was better (adding siteref to the class or not). 
