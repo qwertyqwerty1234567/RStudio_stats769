@@ -1,0 +1,221 @@
+---
+title: "Lab4"
+author: "jche827"
+date: "20/08/2021"
+output: html_document
+---
+
+# The Data Set
+
+The data source for this lab is a set of 31 CSV files containing 15-minute vehicle counts from January 2013, which is the same as lab03. The rows within these CSV files are similar to the rows in the CSV file from Lab Zero and Lab 01. They are stored in the VMs at path: /course/NZTA/.
+
+# Tasks
+## Import
+
+## 1. Read just the first CSV file into r and measure time taken
+```{r, eval=TRUE}
+system.time({
+  countsDF <- read.csv('/course/NZTA/20130101_20130331_TMSTrafficQuarterHour.csv')   
+})
+```
+
+
+### Can you make read.csv() go faster?
+Yes, read.csv() runs faster if it does not have to read data types.
+```{r, eval=TRUE}
+system.time({
+  # adding colClasses as a parameter to reduce time taken by read.csv()
+  countsDF <- read.csv('/course/NZTA/20130101_20130331_TMSTrafficQuarterHour.csv', header=TRUE, colClasses = c("character", "character", "character", "character", "integer", "numeric"))   
+})
+```
+Read csv performed much faster this time, time elapsed went from ~20s to ~15s (Results vary per run)
+
+## 2. Repeat the previous task using data.table::fread() and note any differences.
+```{r, eval=TRUE}
+system.time({
+  countsDT = data.table::fread('/course/NZTA/20130101_20130331_TMSTrafficQuarterHour.csv')
+})
+```
+Data tables read the data much faster than dataframes, even when colClasses was defined.
+
+# Transform
+
+## 3. Calculate daily counts from the 15-min counts in two different ways. For each approach, identify which functions take up most of the time.
+
+### Naive standard R
+```{r, eval=TRUE}
+library(profvis)
+# provided code
+p1 <- profvis({
+  countsDF$day <- as.Date(countsDF$startDatetime, format="%d-%b-%Y")
+dailyCountsDF <- aggregate(countsDF["count"], 
+                           countsDF[c("day", "siteRef", "class")],
+                           sum)
+})
+p1
+```
+the aggregate.data.frame and as.date.character functions took the longest time.
+
+Total time ~ 50000ms
+
+### Data table approach
+```{r, eval=TRUE}
+p2 <- profvis({
+  dailyCountsDT <- countsDT[, day := as.Date(startDatetime, format="%d-%b-%Y")][, sum(count), .(day, siteRef, class)]
+})
+p2
+```
+the as.date.character function took the most time
+
+Total time ~ 8000ms
+
+## 4. Try to change the code so that it runs faster
+
+### Naive standard R
+```{r, eval=TRUE}
+p3 <- profvis({
+  # changing the day column to include character data types
+  countsDF$day <- data.frame(do.call('rbind', strsplit(as.character(countsDF$startDatetime),' ',fixed=TRUE)))$X1
+dailyCountsDF <- aggregate(countsDF["count"], 
+                           countsDF[c("day", "siteRef", "class")],
+                           sum)
+})
+p3
+```
+By changing the date to a character data type, the run time was reduced to about ~ 25000 ms
+
+### Data table approach
+```{r, eval=TRUE}
+p4 <- profvis({
+  dailyCountsDT <- countsDT[, day := data.frame(do.call('rbind', strsplit(as.character(countsDF$startDatetime),' ',fixed=TRUE)))$X1][, sum(count), .(day, siteRef, class)]
+})
+p4
+```
+By changing the date to character data type, we increase the speed to ~ 7000ms
+
+## 5. Check that your faster code produces the same result as the original code
+
+### counting the number of rows in each result
+```{r}
+dim(dailyCountsDF)
+dim(dailyCountsDT)
+```
+They both give the result: 72157 rows, and 4 columns
+
+### Showing the head of both, sorted by count
+```{r}
+head(dailyCountsDF[order(-dailyCountsDF$count),])
+head(dailyCountsDT[order(-dailyCountsDT$V1),])
+```
+Both heads are the same when sorted by count (descending). They also have the same amount of rows and columns, so we can assume they are the exact same results.
+
+
+# Model
+
+## 6. Create a new variable scount that is the square-root of the count.
+```{r}
+dailyCountsDF$scount <- sqrt(dailyCountsDF$count)
+head(dailyCountsDF)
+```
+
+## 7. Split the data into ten equal-sized chunks. Show the averaged RMSE values for both models.
+```{r}
+# For each chunk, use the chunk as a test set and the other nine chunks as the training set and fit a model using the training data to predict scount from the overall mean of scount
+p5 <- profvis({
+set.seed(123456789)
+f1 <- function(x){
+  index <- sample(rep(1:10, length.out=nrow(x)))
+  RMSE <- numeric(10)
+  for (k in 1:10){
+    train <- x[index == k,]
+    test <- x[index != k,]
+    obs <- test$scount
+    predMean <- mean(train$scount)
+    RMSE[k]<-sqrt(mean((obs-predMean)^2))}
+sum(RMSE)/10
+}
+f1(dailyCountsDF)
+})
+
+# For each chunk, use the chunk as a test set and the other nine chunks as the training set and fit the model using the training data to predict scount from class
+p6 <- profvis({
+  set.seed(123456789)
+f2 <- function(x){
+  index <- sample(rep(1:10, length.out=nrow(x)))
+  RMSE <- numeric(10)
+  for (k in 1:10){
+    train <- x[index == k,]
+    test <- x[index != k,]
+    obs <- test$scount
+    lmfit<- lm(scount ~ class, train)
+    predLM <- predict(lmfit, test)
+    RMSE[k]<-sqrt(mean((obs-predLM)^2))}
+sum(RMSE)/10
+}
+f2(dailyCountsDF)
+})
+```
+## Profile your code and identify which lines of code took the most time.
+
+```{r, eval=TRUE}
+# profiling for the first model (scount from mean of scount)
+p5
+```
+the lines which took longest to run are:
+
+1. test <- x[index != k,] took the longest time at ~60s
+
+2. index <- sample(rep(1:10, length.out=nrow(x))) and train <- x[index == k,] each took ~10s to complile
+```{r}
+# profiling from second model (scount from class)
+p6
+```
+The lines which took longest to run (in order) are:
+
+1. test <- x[index != k,] (~70s)
+
+2. lmfit<- lm(scount ~ class, train) (~20s)
+
+3. train <- x[index == k,] (~10s)
+
+# Visualize 
+
+# 8. Create a plot that shows the predictions of both models against ALL of the data
+```{r, eval=TRUE}
+# using a single train-test split as instructed on piazza @95
+index <- sample(rep(1:10, length.out=nrow(dailyCountsDF)))
+train <- dailyCountsDF[index > 1, ]
+test <- dailyCountsDF[index == 1, ]
+obs <- test$scount
+predMean <- mean(train$scount)
+lmfit <- lm(scount ~ class, train)
+predLM <- predict(lmfit, test)
+
+# plotting both models on all of the data (dailtCountsDF)
+plot(scount ~ jitter(as.numeric(factor(class))), dailyCountsDF,
+     xlab="class", axes=FALSE)
+axis(2)
+axis(1, at=as.numeric(unique(factor(dailyCountsDF$class))),
+     label=unique(factor(dailyCountsDF$class)))
+abline(h=predMean, col="green")
+points(as.numeric(unique(factor(dailyCountsDF$class))), 
+       predict(lmfit, data.frame(class=unique(factor(dailyCountsDF$class)))),
+       pch=16, col="red")
+```
+
+
+# Summary
+
+In this lab, we used csv file data from the directory in our virtual machines at /course/NZTA. We imported the first csv and calculated how long it took to run using system.time(). We then used methods to improve the speed of read.csv() by ading the colClass parameter and compared it to a data.table. 
+
+We then used profiling to see the breakdown of time spent within tasks for read.csv() and data.table::fread. We made these methods faster by changing the data types (date to character) and comapred results. 
+
+For modelling, we used a loop function which loops for (k in 1:10) split the data into 10 chunks for 10-fold training and testing. A profiling breakdown showed which lines took the longest to compile. 
+
+
+
+
+
+
+
+
