@@ -1,0 +1,219 @@
+---
+title: "Lab Zero: Data Science Workflow"
+output: html_document
+---
+
+```{r echo=FALSE}
+knitr::opts_chunk$set(
+  comment = ''
+)
+```
+
+# The Data Set
+
+The data are counts of vehicles at different locations on state highways
+across New Zealand on August 8 2020.  
+
+```{bash echo=FALSE}
+head AugustTraffic.csv
+```
+
+# Tasks
+
+## Import
+
+(@) The following code reads the CSV file into R to produce a data frame.
+
+    ```{r}
+    august <- read.csv("AugustTraffic.csv")
+    ```
+    ```{r}
+    head(august)
+    dim(august)
+    ```
+
+## Tidy
+
+(@) In this task, we explore the `startDateTime` variable to show
+    that not all of the rows in the CSV file are from August 8th.
+
+    The following code just uses a regular expression search to find
+    offending rows.
+
+    ```{r}
+    not8 <- grep("0[^8]-AUG-2020", august$startDatetime)
+    august[not8[1],] 
+    length(not8)
+    ```
+   
+    The problem is that the file contains rows that *end* at midnight
+    on August 7th, which are recorded with an end time 
+    as `00:00` on August 8th.
+
+    The following code shows another way to detect the problem, by
+    converting the `startDatetime` to a `POSIXlt` object, rather than
+    just a character vector.  This allows us to look at the
+    day-of-the-month for each `startDatetime` (among other things).
+
+    ```{r}
+    august$start <- as.POSIXlt(august$startDatetime,
+                               format="%d-%b-%Y %H:%M")
+    table(august$start$mday)
+    ```
+
+    There are over 1500 offending rows.  The following code drops them
+    from the data set.
+
+    ```{r}
+    august8 <- august[-not8, ]
+    dim(august8)
+    ```
+
+## Explore 
+
+(@) The following code produces a plot of the distribution of the
+    `count` variable.
+    This shows that the variable is heavily skewed.
+
+    ```{r}
+    plot(density(august8$count), main="")
+    ```
+
+    The following code just shows the distribution of `count` values
+    less than 10.
+    This shows that the variable is also discretised,
+    with peaks at whole-number values and there are a LOT of zero values.
+
+    ```{r}
+    plot(density(august8$count[august8$count < 10]), main="")
+    ```
+
+    The following code creates a boxplot of `count` values for
+    every (start) hour.
+    This shows that there is a clear periodicity to the data set,
+    with higher counts during daylight/work hours.
+    In other words, the data is a time series.
+
+    ```{r}
+    boxplot(count ~ start$hour, august8, xlab="Hour")
+    ```
+
+## Transform
+
+(@) The following code 
+    subsets the data to eliminate rows where the start time
+    is before 8:00 or after 18:00.
+
+    ```{r}
+    august8day <- subset(august8, start$hour >= 8 & start$hour <= 18)
+    ```
+
+    ```{r}
+    dim(august8day)
+    ```
+
+    The following code creates a new variable `scount` (square-root of count).
+
+    ```{r}
+    august8day$scount <- sqrt(august8day$count)
+    ```
+
+    The plot below shows the distribution of the (daylight) `scount`
+    values.  There is still a clear skew, but things are a bit better 
+    than before.
+
+    ```{r}
+    plot(density(august8day$scount), main="")
+    ```
+
+## Model
+
+(@) The following code splits the data into training (90%) and 
+    test (10%) sets.
+
+    ```{r}
+    index <- sample(rep(1:10, length.out=nrow(august8day)))
+    train <- august8day[index > 1, ]
+    test <- august8day[index == 1, ]
+    ```
+    
+    We also define a simple `RMSE()` function.
+
+    ```{r}
+    RMSE <- function(obs, pred) {
+        sqrt(mean((obs - pred)^2))
+    }
+    ```
+    
+    Now we calculate predictions for the test set from
+    a simple mean model and a linear regression        
+    model with a term for the vehicle `class` (both fit
+    on the training set).
+
+    ```{r}
+    obs <- test$scount
+    predMean <- mean(train$scount)
+    lmfit <- lm(scount ~ class, train)
+    predLM <- predict(lmfit, test)
+    ```
+
+    The following code compares the performance of these 
+    two models in terms of RMSE.  Unsurprisingly, 
+    the regression model performs better.
+
+    ```{r}
+    RMSE(obs, predMean)
+    RMSE(obs, predLM)
+    ```
+    
+    Roughly speaking, the predictions of our best model
+    are, on average, within 25 of the actual `count`.
+    Given that most counts are less than 10, this is not
+    great performance and we would ideally be able to find a
+    model that had better predictive performance.
+
+    The following code produces a plot that shows
+    the enormous amount of variability that is NOT captured
+    by our better (very simple) model.
+    It also shows that the simple overall mean overpredicts
+    for almost all heavy (`H`) vehicle counts.
+
+    ```{r}
+    plot(scount ~ jitter(as.numeric(factor(class))), test,
+         xlab="class", axes=FALSE)
+    axis(2)
+    axis(1, at=as.numeric(unique(factor(test$class))),
+         label=unique(factor(test$class)))
+    abline(h=predMean, col="green")
+    points(as.numeric(unique(factor(test$class))), 
+           predict(lmfit, data.frame(class=unique(factor(test$class)))),
+           pch=16, col="red")
+    ```
+
+## Virtual Machines
+
+(@) The following code prints information about the R session
+    (to show that we are running on the course VM).
+
+    ```{r}
+    sessionInfo()
+    ```
+
+# Summary
+
+In this lab, we explored the vehicle count data set for the first time.
+We found one problem immediately, which is that there are rows
+from August 7th included in the file.  However, these were
+easily excluded.
+The `count` variable is highly skewed, which is unsurprising given
+that it is bounded below by 0.  There is also clear periodicity in the
+data, again unsurprising because this is a time series data set.
+Regardless, we reduced the data set to daylight hours and used a 
+square-root transform on the counts to get a less skewed variable
+`scount`.  We then fit two simple models using a training set 
+and compared their performance on a test set.  A simple model
+that predicts the vehicle count based on vehicle class performed
+better than a model based on the overall mean count, though
+this still leaves a lot of variation in the data unexplained.
+
+<hr/>
