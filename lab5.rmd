@@ -16,22 +16,68 @@ These csv files are the same as all previous lab files.
 
 ## 1. Generate a character vector of file names called file
 ```{r}
-files <- list.files('/course/NZTA/')
+files <- Sys.glob('/course/NZTA/*.csv')
 head(files)
 ```
-
 ## 2. Write R code that uses readFile() to read 5 of the CSV files and combines them into a single data table
 ```{r}
 # initializing the readFile function
+library(data.table)
 readFile <- function(filename) {
     countsDT <- fread(filename)
     countsDT[, day := substr(startDatetime, 1, 11)][, .(count = sum(count)), .(day, siteRef, class)]
 }
 ```
+### Measure the time it takes for your code to run.
 ```{r}
-library(data.table)
-trafficSeries <- readFile('/course/NZTA/')
-dim(trafficSeries)
+system.time({
+trafficSeries <- do.call('rbind', lapply(files[c(1:5)], readFile))
+})
 ```
+Roughly 30s total time elapsed
+
+### Your data table trafficSeries should look like this:
+```{r}
+dim(trafficSeries)
+head(trafficSeries)
+```
+## Repeat the previous task, but using “forked” workers to read the files in parallel.
+```{r}
+library(parallel)
+# first find the number of cores
+numCores <- detectCores()
+numCores
+```
+20 cores are found on VM fosstatsprd03
+```{r}
+system.time({
+trafficSeries2 <- do.call('rbind', mclapply(files[c(1:5)], readFile, mc.cores=5))
+})
+```
+### How much of a speed-up does this give (if any)?
+
+Roughly only 7s elapsed using this method.
+
+## 4. Check that the results from the previous two tasks are the same.
+```{r}
+dim(trafficSeries)
+dim(trafficSeries2)
+head(trafficSeries)
+head(trafficSeries2)
+```
+Since these all give the same results, we can assume both methods produce the same datatable
+
+# 5. Repeat the reading-five-files task, but this time using a “cluster” of workers to read the files in parallel
+```{r}
+system.time({
+  cl <- makeCluster(5)
+  trafficSeries3 <- do.call('rbind', parLapply(files[c(1:5)], readFile))
+})
+stopCluster(cl)
+```
+## How long does this take to run and how does that compare with the previous two approaches?
+
+
+
 
 
