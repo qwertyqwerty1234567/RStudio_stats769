@@ -12,3 +12,26 @@ These csv files are the same as all previous lab files.
 
 # Tasks
 
+# Import
+
+## 1. Generate a character vector of file names called file
+```{r}
+files <- list.files('/course/NZTA/')
+head(files)
+```
+
+## 2. Write R code that uses readFile() to read 5 of the CSV files and combines them into a single data table
+```{r}
+# initializing the readFile function
+readFile <- function(filename) {
+    countsDT <- fread(filename)
+    countsDT[, day := substr(startDatetime, 1, 11)][, .(count = sum(count)), .(day, siteRef, class)]
+}
+```
+```{r}
+library(data.table)
+trafficSeries <- readFile('/course/NZTA/')
+dim(trafficSeries)
+```
+
+
