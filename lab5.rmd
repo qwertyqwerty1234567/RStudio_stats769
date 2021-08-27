@@ -1,0 +1,14 @@
+---
+title: "Lab5"
+author: "jche827"
+date: "27/08/2021"
+output: html_document
+---
+
+# The Data Set
+
+The data source for this lab is a set of 31 CSV files containing 15-minute vehicle counts from January 2013 to September 2020. 
+These csv files are the same as all previous lab files.
+
+# Tasks
+
