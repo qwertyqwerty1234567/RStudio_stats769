@@ -16,6 +16,7 @@ These csv files are the same as all previous lab files.
 
 ## 1. Generate a character vector of file names called file
 ```{r}
+# add all files ending in .csv from /NZTA
 files <- Sys.glob('/course/NZTA/*.csv')
 head(files)
 ```
@@ -31,17 +32,18 @@ readFile <- function(filename) {
 ### Measure the time it takes for your code to run.
 ```{r}
 system.time({
+  # reading the first 5 files and binding them into trafficSeries
 trafficSeries <- do.call('rbind', lapply(files[c(1:5)], readFile))
 })
 ```
-Roughly 30s total time elapsed
+Approximately 30s total time elapsed
 
 ### Your data table trafficSeries should look like this:
 ```{r}
 dim(trafficSeries)
 head(trafficSeries)
 ```
-## Repeat the previous task, but using “forked” workers to read the files in parallel.
+## 3. Repeat the previous task, but using “forked” workers to read the files in parallel.
 ```{r}
 library(parallel)
 # first find the number of cores
@@ -51,12 +53,13 @@ numCores
 20 cores are found on VM fosstatsprd03
 ```{r}
 system.time({
+  # we use 5 cores as we only need to bind 5 files
 trafficSeries2 <- do.call('rbind', mclapply(files[c(1:5)], readFile, mc.cores=5))
 })
 ```
 ### How much of a speed-up does this give (if any)?
 
-Roughly only 7s elapsed using this method.
+Approximately only 7s elapsed using this method, so more than ~75% of time saved/sped-up 
 
 ## 4. Check that the results from the previous two tasks are the same.
 ```{r}
@@ -67,15 +70,85 @@ head(trafficSeries2)
 ```
 Since these all give the same results, we can assume both methods produce the same datatable
 
-# 5. Repeat the reading-five-files task, but this time using a “cluster” of workers to read the files in parallel
+## 5. Repeat the reading-five-files task, but this time using a “cluster” of workers to read the files in parallel
+
+### How long does this take to run and how does that compare with the previous two approaches?
 ```{r}
 system.time({
-  cl <- makeCluster(5)
-  trafficSeries3 <- do.call('rbind', parLapply(files[c(1:5)], readFile))
+  cl = makeCluster(5)
+  clusterExport(cl, varlist = c("fread", "readFile", "files"))
+  trafficSeries3 <- do.call('rbind', parLapply(cl, files[c(1:5)], readFile))
 })
-stopCluster(cl)
+head(trafficSeries3)
 ```
-## How long does this take to run and how does that compare with the previous two approaches?
+This method took the longer time compared to forked workers in parallel, and less time than using the regular lappy() method.
+
+## 6. Read all 31 files into a single R data table using the fastest approach (forked workers) and create a single data table called traffic.
+```{r}
+system.time({
+  # we use the max amount of cores (20) as we need to bind 31 files
+traffic <- do.call('rbind', mclapply(files[c(1:31)], readFile, mc.cores=20))
+})
+head(traffic)
+```
+### Use gc() to check how much memory we are using so far and what the peak memory usage has been so far.
+```{r}
+gc()
+```
+We are using approximately 45million vcells (350~ Mbs)
+
+The max used vcells is approximately 144million (~1000 Mbs)
+
+### Run the following code to create a new scount column and to remove missing values from that column.
+```{r}
+traffic <- traffic[, .(day, siteRef, class, scount = sqrt(count))]
+traffic <- traffic[!is.na(scount), ]
+```
+### Your data should now look like this:
+```{r}
+dim(traffic)
+head(traffic)
+```
+# Model
+
+## 7. Estimate the size of the model matrix for the following two models: scount ~ class and scount ~ class + siteRef.
+```{r}
+
+```
+### Write R code to create a “sparse” model matrix for the scount ~ class + siteRef model using model.Matrix() from the ‘MatrixModels’ package. Compare the size of that model matrix to your estimate above.
+```{r}
+
+```
+## 8. Write R code that uses lapply() to call fitLM() on each of the 10 chunks and measure the time that it takes for your code to run.
+```{r}
+
+```
+### Report the average RMSE for both models.
+```{r}
+
+```
+## 9. Repeat the previous task, but using “forked” workers to call fitLM() in parallel.
+```{r}
+
+```
+### Compare the time taken in this task compared to the previous task.
+
+### Use gc() to check how much memory we have used and what the peak memory usage was overall.
+```{r}
+
+```
+# Visualize
+```{r}
+
+```
+## 10. Fit the class + siteRef model to the entire (daily count) data set and produce a plot of ALL of the data with the predictions from this model.
+
+# Summary
+
+
+
+
+
 
 
 
