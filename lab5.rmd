@@ -7,7 +7,8 @@ output: html_document
 
 # The Data Set
 
-The data source for this lab is a set of 31 CSV files containing 15-minute vehicle counts from January 2013 to September 2020. 
+The data source for this lab is a set of 31 CSV files containing 15-minute vehicle counts from January 2013 to September 2020. They are stored in the VMs at path: /course/NZTA/.
+
 These csv files are the same as all previous lab files.
 
 # Tasks
@@ -20,7 +21,7 @@ These csv files are the same as all previous lab files.
 files <- Sys.glob('/course/NZTA/*.csv')
 head(files)
 ```
-## 2. Write R code that uses readFile() to read 5 of the CSV files and combines them into a single data table
+## 2. Write R code that uses readFile() to read 5 of the CSV files and combines them into a single data table and measure the time it takes for your code to run.
 ```{r}
 # initializing the readFile function
 library(data.table)
@@ -29,7 +30,6 @@ readFile <- function(filename) {
     countsDT[, day := substr(startDatetime, 1, 11)][, .(count = sum(count)), .(day, siteRef, class)]
 }
 ```
-### Measure the time it takes for your code to run.
 ```{r}
 system.time({
   # reading the first 5 files and binding them into trafficSeries
@@ -68,20 +68,20 @@ dim(trafficSeries2)
 head(trafficSeries)
 head(trafficSeries2)
 ```
-Since these all give the same results, we can assume both methods produce the same datatable
+Since the heads and sizes give the same results, we can assume both methods produce the same datatable
 
-## 5. Repeat the reading-five-files task, but this time using a “cluster” of workers to read the files in parallel
+## 5. Repeat the reading-five-files task, but this time using a “cluster” of workers to read the files in parallel. How long does this take to run and how does that compare with the previous two approaches?
 
-### How long does this take to run and how does that compare with the previous two approaches?
 ```{r}
 system.time({
   cl = makeCluster(5)
   clusterExport(cl, varlist = c("fread", "readFile", "files"))
   trafficSeries3 <- do.call('rbind', parLapply(cl, files[c(1:5)], readFile))
+  stopCluster(cl)
 })
 head(trafficSeries3)
 ```
-This method took the longer time compared to forked workers in parallel, and less time than using the regular lappy() method.
+This method took the longer time (~15-20s) compared to forked workers in parallel (~7s), and less time than using the regular lappy() method (~30s).
 
 ## 6. Read all 31 files into a single R data table using the fastest approach (forked workers) and create a single data table called traffic.
 ```{r}
@@ -91,6 +91,8 @@ traffic <- do.call('rbind', mclapply(files[c(1:31)], readFile, mc.cores=20))
 })
 head(traffic)
 ```
+Approximately 20s total elapsed time
+
 ### Use gc() to check how much memory we are using so far and what the peak memory usage has been so far.
 ```{r}
 gc()
@@ -113,39 +115,144 @@ head(traffic)
 
 ## 7. Estimate the size of the model matrix for the following two models: scount ~ class and scount ~ class + siteRef.
 ```{r}
-
+# estimating size of scount ~ class model
+x <- model.matrix(scount ~ class, traffic)
+object.size(x)
 ```
+
+
+the scount ~ class model is 216877224 bytes in size.
+
+The scount ~ class + siteRef model's estimated size is expected to be much larger.
+
+```{r}
+# first we need to find the size of siteref
+siteClasses = unique(factor(traffic$siteRef))
+length(siteClasses)
+```
+siteRef has 1702 unique values, and class has 2, number of total columns in the matrix= 1702+2
+Another column will contain the scount values, for a total of 1705. 
+
+The resulting matrix will have 1705 columns and 2710949 rows.
+
+The model matrix for scount ~ class + siteRef will be estimated to have:
+
+2710949 rows x 1705 columns x 8 (bytes for each data instance) = 36977344360 bytes (a huge amount)
+
+
 ### Write R code to create a “sparse” model matrix for the scount ~ class + siteRef model using model.Matrix() from the ‘MatrixModels’ package. Compare the size of that model matrix to your estimate above.
 ```{r}
-
+library(MatrixModels)
+y <- model.Matrix(scount ~ class + siteRef, traffic, sparse=TRUE)
+object.size(y)
 ```
+the scount ~ class + siteRef model has 259260912 bytes.
+
+This sparse model is similar to the size of the scount ~ class model. 
+Compared to the scount ~ class + siteRef model size estimation, this is a drastic decrease. In a non-sparse matrix, the size will be much larger since all data from 31 csv files are included. 
+
 ## 8. Write R code that uses lapply() to call fitLM() on each of the 10 chunks and measure the time that it takes for your code to run.
 ```{r}
+# code from questions
+#The following code generates index values (to split the data into ten equal-size chunks) and defines a fitLM() function that splits the data into test and training sets, fits the two models, scount ~ class and scount ~ class + siteRef (using glm4() from ‘MatrixModels’, to take advantage of sparse model matrices), and returns the RMSE for both models. The fitLM() function takes a single integer argument that specifies which chunk of the data to use as the test set.
 
+
+index <- sample(rep(1:10, length.out=nrow(traffic)))
+sites <- levels(factor(traffic$siteRef))
+
+RMSE <- function(obs, pred) {
+            sqrt(mean((obs - pred)^2))
+}
+
+fitLM <- function(i) {
+    train <- traffic[index != i, ]
+    train[, siteRef := factor(siteRef, levels=sites)]
+    test <- traffic[index == i, ]
+    test[, siteRef := factor(siteRef, levels=sites)]
+    fit1 <- glm4(scount ~ class, data=train, sparse=TRUE)
+    coef1 <- coef(fit1)
+    rm(fit1)
+    fit2 <- glm4(scount ~ class + siteRef, data=train, sparse=TRUE)
+    coef2 <- coef(fit2)
+    rm(fit2)
+    pred1 <- model.Matrix(scount ~ class, 
+                          data=test, sparse=TRUE) %*% 
+                 coef1
+    pred2 <- model.Matrix(scount ~ class + siteRef, 
+                          data=test, sparse=TRUE) %*% 
+                 coef2
+    obs <- test$scount
+    c(RMSE(obs, as.vector(pred1)), RMSE(obs, as.vector(pred2)))
+}
 ```
+```{r}
+# measuring time for 10 chunks
+system.time(rmse <- lapply(1:10, fitLM))
+```
+The total time elapsed taken for lapply is ~80s
+
 ### Report the average RMSE for both models.
 ```{r}
-
+# storing all rmse values for each model in different columns
+RMSE <- matrix(unlist(rmse), byrow=TRUE, ncol=2)
+# calculating the average of both columns
+colMeans(RMSE)
 ```
 ## 9. Repeat the previous task, but using “forked” workers to call fitLM() in parallel.
 ```{r}
-
+# we use 10 cores for each of the 10 chunks of traffic
+system.time(t <- mclapply(1:10, fitLM, mc.cores=10))
 ```
 ### Compare the time taken in this task compared to the previous task.
 
+The forked workers total elapsed time is roughly 10s, which is a huge improvement from the ~80+ seconds in question 8. This is due to the forked workers running in parallel on 10 seperate cores, allowing for the drastic decrease in time elapsed.
+
 ### Use gc() to check how much memory we have used and what the peak memory usage was overall.
 ```{r}
-
+gc()
 ```
+
+We are using approximately 65million vcells (500~ Mbs)
+
+The max used vcells is approximately 200million (~1500 Mbs)
+
 # Visualize
 ```{r}
+fit <- glm4(scount ~ class + siteRef, data=traffic, sparse=TRUE)
+coef <- coef(fit)
+rm(fit)
+traffic$pred <- as.vector(model.Matrix(scount ~ class + siteRef, data=traffic, sparse=TRUE) %*% coef)
+traffic$site <- reorder(as.factor(traffic$siteRef), traffic$scount)
+trafficClass <- split(traffic, traffic$class)
 
+plotClass <- function(x, col) {
+   sites <- split(x, x$site, drop=TRUE)
+   siteMin <- sapply(sites, function(y) min(y$scount))
+   siteMax <- sapply(sites, function(y) max(y$scount))
+   pred <- sapply(sites, function(y) y$pred[1])
+   s <- as.numeric(factor(sapply(sites, function(y) y$siteRef[1]),
+                          levels=levels(x$site)))
+   segments(s, siteMin, s, siteMax, col=col)
+   points(s, pred, pch=16, cex=.2, col="red")
+}
+bg <- "grey10"
+par(bg=bg, mar=rep(2, 4))
+plot(traffic$site, traffic$scount, border=NA, ann=FALSE, axes=FALSE,
+     ylim=range(traffic$scount, traffic$pred))
+usr <- par("usr")
+rect(usr[1], usr[3], usr[2], usr[4], col=bg)
+box(col="white")
+plotClass(trafficClass[[1]], adjustcolor("yellow", alpha=.5))
+plotClass(trafficClass[[2]], adjustcolor("green", alpha=.5))
 ```
+
 ## 10. Fit the class + siteRef model to the entire (daily count) data set and produce a plot of ALL of the data with the predictions from this model.
 
 # Summary
 
+In this lab, we first measured the time taken for combining 5 csv files into a single data table, then compared this to using forked workers to run this process in parallel. We then compared this to using a cluster approach and compared the times taken. This was done to prove that forked workers and clusters improve the elapsed time by running processes on different cores or clusters, in parallel. 
 
+We then use a combined 31 csv traffic data to model. We used a sparse matrix to reduce the size of the scount ~ class and siteref matrix as it would otherwise be very large. We compared using lapply to fitLM versus using forked workers to do the same task, and saw the time elapsed was much shorter in the forked worker scenario. We then fit the class + siteRef model to the entire (daily count) data set and produced a plot of all of the data with the predictions from this model.
 
 
 
