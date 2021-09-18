@@ -1,0 +1,88 @@
+---
+title: "Lab6"
+author: "jche827"
+date: "18/09/2021"
+output: html_document
+---
+
+# The Data Set
+
+The data source for this lab is from UCI Machine Learning Repository. We are going to use the Automobile data set. 
+# Tasks
+
+# Import
+
+## 1. Produce a tidier file automobile.csv
+```{r}
+automobileoriginal <- read.csv("automobile-original.csv")
+automobilesubset <- read.csv("automobile-subset.csv")
+
+head(automobileoriginal)
+head(automobilesubset)
+```
+### Write R code that can reproduce the second data set from the first one
+```{r}
+automobile <- automobileoriginal[,-c(9)]
+automobile[automobile=='?'] <- NA
+automobile <- na.omit(automobile)
+write.csv(automobile,"automobile.csv", row.names = FALSE)
+```
+### Ensure that the values are identical to those from automobile-subset.csv
+```{r}
+automobile <- read.csv("automobile.csv")
+automobilesubset <- read.csv("automobile-subset.csv")
+all(automobile == automobilesubset) 
+```
+# Explore
+```{r}
+dim(automobile)
+```
+## 2. Write R code to answer the following questions:
+
+### What is the mean price (price) of all vehicles?
+```{r}
+mean(automobile$price)
+```
+### How many vehicles have 4 doors (num.of.doors)?
+```{r}
+occurences<-table(unlist(automobile$num.of.doors))
+occurences
+```
+#### There are 95 four doored cars
+
+### What are the different engine types (engine.type) among the observations?
+```{r}
+occurences2 <- table(unlist(automobile$engine.type))
+occurences2
+```
+#### the engine types are: dohc, ohc, l, ohcf and ohcl
+
+### How many vehicles have a price (price) higher than $20000?
+```{r}
+occurences3 <- table(unlist(automobile$price > 20000))
+occurences3
+```
+#### 13 cars are priced over $20k
+
+### What is the mean price (price) for “4wd” (drive.wheels)
+```{r}
+mean(automobile[automobile$drive.wheels == "4wd", 25])
+```
+#### The mean price for 4wd are $10,421
+
+## 3. Produce pairwise scatterplots between variables normalized.losses, wheel.base, peak.rpm and price.
+```{r}
+pairs(automobile[, c('normalized.losses', 'wheel.base', 'peak.rpm', 'price')])
+```
+# Linear regression
+
+## 4. Produce the full linear regression model with all variables included
+
+
+### Comment on the outcome
+
+
+
+
+
+
