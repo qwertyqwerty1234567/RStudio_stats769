@@ -149,7 +149,7 @@ plot(aic)
 ## 8. Apply the AIC-selected model to the data and compute the resulting MSE
 ```{r}
 automobile.matrix = model.matrix(price ~ . - num.of.cylinders -engine.type -fuel.system -symboling -normalized.losses -fuel.type -drive.wheels -stroke -compression.ratio -horsepower -peak.rpm -city.mpg -highway.mpg -num.of.doors -width -engine.size -bore, data=automobile)
-head(automobile.matrix)
+
 bwj.matrix = automobile.matrix[,names(beta)]
 (yhat = drop(bwj.matrix %*% beta))  
 resid = automobile$price - yhat
@@ -159,10 +159,8 @@ resid = automobile$price - yhat
 
 ## 9. Create a plot that shows the predictions of your AIC-selected model against the response variable, using different colors for different levels of drive.wheels.
 ```{r}
-plot(automobile$price, yhat)
-plot(r.bwd)
+plot(r.bwd, col=factor(automobile$drive.wheels))
 ```
-
 
 # Lasso
 
@@ -170,34 +168,82 @@ plot(r.bwd)
 ```{r}
 x = automobile.matrix[,-1]     # remove the intercept term
 y = automobile$price
-(r.ridge = glmnet(x, y, alpha=0))
-coef(r.ridge)
-coef(r.ridge)[,10]
-
-(r.lasso = glmnet(x, y, alpha=1))  # alpha = 1, lasso
-names(r.lasso)
-coef(r.lasso)
-coef(r.lasso)[,10]
+(r.lasso = glmnet(x, y, alpha=1)) 
 ```
-
 
 ## 11. Create a coefficient profile plot of the coefficient paths that varies with the value of λ (or log(λ))
 ```{r}
-(yhat = drop(predict(r.lasso, s=10, alpha=1, newx=x))) 
-resid = automobile$price - yhat 
-(mse = mean(resid^2))
+names(r.lasso)
+coef(r.lasso)[,10]
 ```
 
-## 12. Choose 5 different λ-values within a seemingly reasonable range and compute the MSEs of the corresponding 5 Lasso subset models. Write R code to find out how many variables are included in each Lasso subset model.
+## 12. Choose 5 different λ-values within a seemingly reasonable range
 ```{r}
+# lambda = 2
+r.lasso1 = glmnet(x, y, alpha=1, lambda = 2)
+(yhat1 = drop(predict(r.lasso, s=2, alpha=1, newx=x)))  
+resid1 = automobile$price - yhat1 
+
+# lambda = 4
+r.lasso2 = glmnet(x, y, alpha=1, lambda = 4)
+(yhat2 = drop(predict(r.lasso, s=4, alpha=1, newx=x))) 
+resid2 = automobile$price - yhat2 
+
+# lambda = 6
+r.lasso3 = glmnet(x, y, alpha=1, lambda = 6)
+(yhat3 = drop(predict(r.lasso, s=6, alpha=1, newx=x)))  
+resid3 = automobile$price - yhat3 
+
+# lambda = 8
+r.lasso4 = glmnet(x, y, alpha=1, lambda = 8)
+(yhat4 = drop(predict(r.lasso, s=8, alpha=1, newx=x))) 
+resid4 = automobile$price - yhat4 
+
+# lambda = 10
+r.lasso5 = glmnet(x, y, alpha=1, lambda = 10)
+(yhat5 = drop(predict(r.lasso, s=10, alpha=1, newx=x)))  
+resid5 = automobile$price - yhat5 
+```
+### Compute the MSEs of the corresponding 5 Lasso subset models
+```{r}
+# MSE for lambda = 2
+(mse1 = mean(resid1^2))
+
+# MSE for lambda = 4
+(mse2 = mean(resid2^2))
+
+# MSE for lambda = 6
+(mse3 = mean(resid3^2))
+
+# MSE for lambda = 8
+(mse4 = mean(resid4^2))
+
+# MSE for lambda = 10
+(mse5 = mean(resid5^2))
+```
+
+
+### Write R code to find out how many variables are included in each Lasso subset model
+```{r}
+# number of variables in lambda = 2
+paste(r.lasso1$df-1)
+# number of variables in lambda = 4
+paste(r.lasso2$df-1)
+# number of variables in lambda = 6
+paste(r.lasso3$df-1)
+# number of variables in lambda = 8
+paste(r.lasso4$df-1)
+# number of variables in lambda = 10
+paste(r.lasso5$df-1)
 
 ```
+The mse gradually rises as the lambda increases. At higher lambdas such as 30+, the number of variables begins to decrease from 25 to 24, 23, etc.
 
 # Summary
 
 In this lab we explored different methods of linear regression. We first cleaned the data by removing the missing values represetned by "?". We then practices basic queries in R to find stuff like the mean, counts and different types of variables in the data. We then used pairwise scatter plots to show some visualization.
 
-Linear regression models were used to and comapred with each other using different variables. We removed variables we thought were insignificant, or would cause the linear regression model to fail. Backwards selection and the AIC were used for subset selection, and we computed the lasso model. We then chose λ values which we thought were good and computed the mean squared errors for them. 
+Linear regression models were used to and comapred with each other using different variables. We removed variables we thought were insignificant, or would cause the linear regression model to fail. Backwards selection and the AIC were used for subset selection, and we computed the lasso model which selects variables based on the lambda value.. We then chose λ values between a range and computed the mean squared errors for them. We looked at how different lambdas affected the variable selection.
 
 
 
