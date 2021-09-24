@@ -1,0 +1,70 @@
+---
+title: "Lab7"
+author: "jche827"
+date: "24/09/2021"
+output: html_document
+---
+
+# The Data Set
+
+We are going to the use a subset of the automobile data set that was used in Lab 6. In particular, the variables wheel.base, length, height, highway.mpg and price are considered in this lab. To concentrate, we can produce a subset data frame auto2 as follows:
+
+```{r}
+auto = read.csv("automobile.csv", stringsAsFactors=TRUE)
+auto2 = auto[,c("wheel.base", "length", "height", "highway.mpg", "price")]
+pairs(auto2)
+```
+
+
+# Tasks
+```{r}
+# importing libraries
+library(splines)
+library(gam)
+library(parallel)
+```
+
+# Modelling Nonlinear Relationship
+
+## Consider polynomial regression models using highway.mpg to predict the value of price.
+## 1. Find all polynomial regression models for degrees 1 to 5
+```{r}
+
+```
+
+## 2. Superimpose them all in one scatter plot of the data
+```{r}
+
+```
+
+### What do you generally observe in the fitted curve when the polynomial degree increases?
+
+## 3. Find the BIC-selected polynomial regression model. (You may consider using the residuals provided by the lm() fit`.)
+
+### Do you think this is a reasonable fit?
+
+# Generalised Additive Models
+
+## 4. Fit a GAM to the data set, using a smoothing spline with 5 degrees of freedom for each predictor variable: wheel.base, length, height, highway.mpg.
+
+### Create the plots for all the additive terms in the model
+
+## 5. Use your GAM to predict the price value for a new observation: wheel.base = 110, length = 190, height = 55, highway.mpg = 25
+
+## 6. Re-fit your GAM by adjusting manually the degrees of freedom of smoothing splines used for the additive terms until the fit visually looks reasonable to you. Provide some arguments.
+
+# Cross-validation for Regression Splines
+
+## 7. For cubic regression splines, let us consider using knots that are evenly distributed between the two extreme values (minimum and maximum) of the predictor variable, but excluding the two extreme values. That is, given the number of knots, m, we create the knots as follow:
+
+```{r}
+attach(auto2)
+m = 5            # number of knots
+(rg = range(highway.mpg)) 
+(knots = seq(rg[1], rg[2], length=m+2)[-c(1,m+2)])
+detach(auto2)
+```
+
+
+
+
