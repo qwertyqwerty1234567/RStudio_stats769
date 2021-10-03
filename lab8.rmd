@@ -1,0 +1,39 @@
+---
+title: "Lab8"
+author: "jche827"
+date: "3/10/2021"
+output: html_document
+---
+
+# The Data Set
+
+The data source for this lab is from UCI Machine Learning Repository. The data is a biomedical data set built by Dr. Henrique da Mota. The data have been organized in two different but related classification tasks. The first task consists in classifying patients as belonging to one out of three categories: Normal (100 patients), Disk Hernia (60 patients) or Spondylolisthesis (150 patients). For the second task, the categories Disk Hernia and Spondylolisthesis were merged into a single category labelled as 'abnormal'. Thus, the second task consists in classifying patients as belonging to one out of two categories: Normal (100 patients) or Abnormal (210 patients). We are using the Vertebral Column data set. 
+
+# Import
+```{r}
+vc = read.csv("vertebral-column.csv", stringsAsFactors=TRUE)
+head(vc)
+
+# load libraries
+library(MASS)
+library(class)
+library(gam)
+library(nnet)
+library(e1071)
+library(parallel)
+```
+
+# Exploration
+
+## 1. Create a pairwise scatterplot, with observations of different classes shown in different colors.
+```{r}
+
+```
+
+# Classification
+
+## 2. Linear discriminant analysis
+
+
+
+
