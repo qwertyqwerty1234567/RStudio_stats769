@@ -40,7 +40,7 @@ plot(vc[,-7], col=as.numeric(vc[,7])+1)
 ```{r}
 yhat1 = p1$class
 table(vc$class, yhat1)     # confusion table
-(A = mean(vc$class == yhat1))    # Classfication accuracy (training/resubstituion)
+(A1 = mean(vc$class == yhat1))    # Classfication accuracy (training/resubstituion)
 ```
 Classification accuracy of Linear discriminant analysis: 81.6129%
 
@@ -51,7 +51,7 @@ Classification accuracy of Linear discriminant analysis: 81.6129%
 ```
 ```{r}
 table(vc$class, yhat2)     # confusion table
-(A = mean(vc$class == yhat2))    # Classfication accuracy
+(A2 = mean(vc$class == yhat2))    # Classfication accuracy
 ```
 Classification accuracy of Quadratic discriminant analysis:  87.41935%
 
@@ -62,7 +62,7 @@ Classification accuracy of Quadratic discriminant analysis:  87.41935%
 ```
 ```{r}
 table(vc$class, yhat3)     # confusion table
-(A = mean(vc$class == yhat3))    # Classfication accuracy
+(A3 = mean(vc$class == yhat3))    # Classfication accuracy
 ```
 Classification accuracy of Naive Bayes: 83.54839%
 
@@ -70,51 +70,104 @@ Classification accuracy of Naive Bayes: 83.54839%
 ```{r}
 (r4 = multinom(class ~ ., data=vc))
 table(vc$class, predict(r4, vc))    # Confusion table
-mean(vc$class == predict(r4, vc))   # classification accuracy
+A4 = mean(vc$class == predict(r4, vc))   # classification accuracy
 ```
 Classification accuracy of Multinomial logistic regression: 87.41935%
 
 ## 6. K -nearest neighbours (with K=10)
 ```{r}
-yhat5 = knn(train=vc[,4:6], test=vc[,4:6], cl=vc[,7], k=10)   # K = 5
+set.seed(123)
+yhat5 = knn(train=vc[,1:6], test=vc[,1:6], cl=vc[,7], k=10)   # K = 10
 table(vc[,7], yhat5)
-(A = mean(vc$class == yhat5)) 
+(A5 = mean(vc$class == yhat5)) 
 ```
-Classification accuracy of K -nearest neighbours (with K=10): 88.06452%
+Classification accuracy of K -nearest neighbours (with K=10): 88.70968%
 
 
 # Primary Performance Evaluation
 
 ## 7. Present your resulting classification accuracy for all five classification methods in a table
 ```{r}
-
+t <- matrix(c(A1, A2, A3, A4, A5), ncol=1)
+colnames(t) <- c("Classification Accuracy")
+rownames(t) <- c("Linear discriminant analysis", "Quadratic discriminant analysis", "Naive Bayes", "Multinomial logistic regression", "K -nearest neighbours")
+x <- as.table(t)
+x
 ```
 
 ### From this table, what can we say about the relative performance of these methods for the data set?
 
+In my opinion, the relative performance for these models are actually very similar, they all give accuracies around the 80% range. The variance between best and worst accuracies is only around 7%.
+
 # Multiple Logistic Regression and Generalised Additive Models
 
 ## 8. Create a response variable from variable class so that both classes DH and SL are relabelled as AB (Abnormal).
+```{r}
+vc$class2 <- vc$class
+vc$class2 = gsub("DH|SL", "AB", vc$class2)
+vc$class2 <- as.factor(vc$class2)
+vc = subset(vc, select = -c(class) )
+head(vc)
+```
 
 ### Use glm() to build a multiple logistic regression model for this new class variable, and compute the confusion matrix and resubstitution classification accuracy
+```{r, results=FALSE}
+(r6 = glm(class2 ~ ., data=vc, family = binomial))
+```
+
+```{r}
+yhat =  predict(r6, newdata=vc, type="response")
+table(vc$class2, ifelse(yhat>=0.5, "NO", "AB"))      # Confusion table
+x <- mean(vc$class2 == ifelse(yhat>=0.5, "NO", "AB"))      # Classification accuracy
+x
+```
 
 ## 9. Use step() to find the AIC-selected model, with backward selection.
+```{r}
+r7 = step(r6, type="backward")    # backward selection. Only AIC
+summary(r7)
+```
 
 ### Which variables are removed by the AIC?
 
+The lla and ss variable columns were removed by the AIC.
+
+
 ## 10. Extend the AIC-selected model with gam() so that each linear term is replaced with a smoothing spline of 5 degrees of freedom. Take a visual approach to reasonably lower the degrees of freedom in each term.
+```{r}
+(r8 = gam(class2 ~ s(pi, 5) + s(pt, 5) + s(pr, 5) + s(gos, 5), data=vc, family=binomial()))
+plot(r8)
+```
+These are the plots before changing the DoF
+```{r}
+(r8 = gam(class2 ~ s(pi, 7) + s(pt, 6) + s(pr, 6) + s(gos, 5), data=vc, family=binomial()))
+plot(r8)
+```
+These are the plots after changing the DoF.
+
+The gos plot was not changed as the visualization barely changes with the DoF. It's bascially mostly a straight line. The other variables were slightly increased to show better curves.
+
 
 ### For your chosen model, compute the confusion matrix and classification accuracy
+```{r, results = FALSE}
+yhat = predict(r8, vc)
+```
+```{r}
+table(vc$class2, ifelse(yhat>=0.5, "NO", "AB"))    # Confusion table
+A = mean(vc$class2 == ifelse(yhat>=0.5, "NO", "AB"))   # classification accuracy
+A
+```
 
 # Cross-validation and Parallel Computing
 
 ## 11. Reconsider the 3-class problem studied in Questions 2-7. Use 10 repetitions of 10-fold cross-validation to evaluate the performance of the 5 classification methods
 
-### Present your resulting classification accuracy of all five classification methods in a table. Comment on the results.
+```{r}
+vc = read.csv("vertebral-column.csv", stringsAsFactors=TRUE)
+```
 
 ## 12. Modify your code so that parallel computing can be used, in which each job running in parallel is only for the computation about one fold out of 10 (i.e., one training set and one test set). Make sure that the same subsamples are used by different methods and that the results are reproducible
 
-### Compare timings with 1, 5, 10, 20 cores
 
 # Summary
 
