@@ -1,0 +1,214 @@
+---
+title: "Lab9"
+author: "jche827"
+date: "10/10/2021"
+output: html_document
+---
+```{r}
+library(tree)
+library(randomForest)
+library(gbm)
+```
+
+# The Data Set
+
+The data source for this lab is from UCI Machine Learning Repository. We using the QSAR biodegradation data set. The data set has 41 predictors (molecular descriptors) and one response variable class, which has two levels: RB (ready biodegradable) and NRB (not ready biodegradable).
+
+```{r}
+biodeg = read.csv("biodeg.csv", stringsAsFactors=TRUE)
+head(biodeg)
+```
+
+# Training and Test Data
+
+## 1. Randomly divide the data set into two halves, and save them in two data frames named train and test
+```{r}
+set.seed(123)
+smp_size <- floor(0.5 * nrow(biodeg))
+train_ind <- sample(seq_len(nrow(biodeg)), size = smp_size)
+train <- biodeg[train_ind, ]
+test <- biodeg[-train_ind, ]
+
+head(train)
+head(test)
+
+dim(biodeg)
+dim(test)
+dim(train)
+```
+
+# Classification trees
+
+## 2. Fit an unpruned classification tree to the training data. Plot it (as pretty as you can)
+```{r}
+(r = tree(class ~ ., data=train))
+plot(r)
+text(r, pretty=0)
+```
+
+### Identify three most important variables from this classification tree.
+
+The 3 most important varibales in terms of defining class are: SpMaxBm, SdO and SdssC as they partition the tree the most out of all the variables.
+
+## 3. Compute the training and test errors
+```{r}
+
+yhat = predict(r, newdata=train)
+head(yhat)
+head(train$class)
+A = mean(train$class == ifelse(yhat>=0.5, "NRB", "RB"))
+A
+```
+```{r}
+yhat = predict(r, newdata=test)
+head(yhat)
+head(test$class)
+A = mean(test$class == ifelse(yhat>=0.5, "NRB", "RB"))
+A
+```
+## 4. Consider pruning the tree using cross-validation with deviance. Produce a pruned tree based by selecting a cost-complexity parameter value, and plot it.
+```{r}
+(cv.r = cv.tree(r))    # Cross-validation, K = 10 by default (so we don't have to implement it)
+(j.min = which.min(cv.r$dev))          # smallest CV deviance
+(size = cv.r$size[j.min])
+(r2 = prune.tree(r, best=size))        # tree pruning, based on the best size
+plot(r2)
+text(r2, pretty=0)
+```
+
+### Compute the training and test errors for this pruned tree
+```{r}
+
+yhat = predict(r2, newdata=train)
+head(yhat)
+head(train$class)
+A = mean(train$class == ifelse(yhat>=0.5, "NRB", "RB"))
+A
+```
+```{r}
+yhat = predict(r2, newdata=test)
+head(yhat)
+head(test$class)
+A = mean(test$class == ifelse(yhat>=0.5, "NRB", "RB"))
+A
+```
+### Do you think the pruning helps?
+
+I actually don't think the pruning helps at all, the size of the pruned tree is still very similar to the unpruned tree based off the plot it produces, both have 5 levels. The accuracies are not different either. 
+
+## 5. Consider pruning the tree using cross-validation with misclassification rates. Produce a pruned tree by selecting a tree size, and plot it
+```{r}
+set.seed(769)
+(cv.r = cv.tree(r, method="misclass"))    # use misclassification rate
+# $dev are the numbers of misclassified observations
+(j.min = max(which(cv.r$dev == min(cv.r$dev))))     # if more than one, usually choose the simplest model
+(k = cv.r$k[j.min])             # cost-complexity parameter
+(r2 = prune.tree(r, k=k, method="misclass"))       # pruned tree
+plot(r2)
+text(r2, pretty=0)        
+```
+
+### Compute the training and test errors for this pruned tree
+```{r}
+
+yhat = predict(r2, newdata=train)
+head(yhat)
+head(train$class)
+A = mean(train$class == ifelse(yhat>=0.5, "NRB", "RB"))
+A
+```
+```{r}
+yhat = predict(r2, newdata=test)
+head(yhat)
+head(test$class)
+A = mean(test$class == ifelse(yhat>=0.5, "NRB", "RB"))
+A
+```
+### Do you think the pruning helps?
+
+Based off my results, it does not help. However my results may be incorrect, so it should be considered that they may work if the results are accurate. I didn't have much time for this lab.
+
+# Bagging
+
+## 6. Produce a Bagging model for the training data with 500 trees construnted
+```{r}
+library(randomForest)
+
+set.seed(769)
+(r = randomForest(class ~ ., data=biodeg, mtry=500, importance=TRUE))
+plot(r, main="Error rates")      # error rates
+legend("topright", leg=colnames(r$err.rate), lty=1:3, col=1:3)
+```
+```{r}
+round(importance(r), 2)   # show importance of variables - higher values mean more important
+yhat = predict(r, biodeg)
+table(biodeg$class, yhat)    # confusion table
+mean(biodeg$class == yhat)   # classification accuracy -- resubstitution
+```
+
+### What are the three most important variables, in terms of decreasing the Gini index, according to Bagging?
+
+The highest mean decreases are from SpMaxBm, SpMaxL and SdssC, in descending order.
+
+# Random Forests
+
+## 8. Produce a Random Forest model with 500 trees constructed
+```{r}
+set.seed(769)
+(r = randomForest(class ~ ., data=biodeg, mtry=500, importance=TRUE))
+plot(r, main="Error rates")      # error rates
+legend("topright", leg=colnames(r$err.rate), lty=1:3, col=1:3)
+```
+
+```{r}
+round(importance(r), 2)
+yhat = predict(r, biodeg)
+table(biodeg$class, yhat)    # confusion table
+mean(biodeg$class == yhat)   # classification accuracy -- resubstitution
+```
+
+
+### What are the three most important variables, in terms of accuracy, according to Random Forest?
+
+SpMaxBm, SpMaxL and SM6Bm, in descending order.
+
+# Boosting
+
+## 10. Produce a Boosting model, with 500 trees constructed.
+
+```{r}
+library(gbm)     # Gradient Boosting Machine
+
+set.seed(769)
+# use distribution="bernoulli" for a two-class classification problem
+biodeg2 = cbind(biodeg, class2=as.integer(biodeg$class)-1)   # requires integer values 
+(r = gbm(class2 ~ . - class, data=biodeg2, distribution="bernoulli", n.trees=500, interaction.depth=3))
+summary(r)
+```
+
+```{r}
+plot(r)
+```
+
+```{r}
+p = predict(r, biodeg, type="response")
+head(p)
+yhat = (p > 0.5) + 1
+table(biodeg$class, levels(biodeg$class)[yhat])    # confusion table
+mean(biodeg$class == yhat)                       # classification accuracy -- resubstitution
+```
+
+### What are the three most important variables, according to Boosting?
+
+SpMaxBm, SpMaxL, SpPosABp, based off the influence ranking.
+
+
+# Summary
+
+In this lab, I attempted a bit of tree classification. Plotting trees, and testing accuracy for test and train sets. Also bagging and boosting were used, and from these methods we see that they classify differen't varibales to be more important. Both ensembles were used with 500 trees. Overall didn't have much time at all for this lab, but still managed to grasp an understanding of the algorithms at a high level, but not a low level technical underderstanding.
+
+
+
+
+
+
