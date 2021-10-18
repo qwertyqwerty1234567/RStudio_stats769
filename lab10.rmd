@@ -1,0 +1,208 @@
+---
+title: "Lab10"
+author: "jche827"
+date: "17/10/2021"
+output: html_document
+---
+
+# The Data Set
+
+The source of the data we use in this lab is from Open ML. In particular, we are going to use the Phoneme data set. The data set has 5 numeric predictors and one response variable class, which has two levels: Nasal (nasal vowels) and Oral (oral vowels). The numerical variables have all be standardised (and followed with a rounding to 4 d.p.) to have mean 0 and standard deviation 1, as also in the original data set. A pairwise scatterplot of the data looks like the following:
+
+The original Phoneme data set has 5404 observations. To make computation a bit faster for this assignment, I have downsized it to 1000 observations via a random subsampling, and the downsized data set is available on Canvas. 
+
+```{r}
+phoneme = read.csv("phoneme.csv", stringsAsFactors=TRUE)
+with(phoneme, pairs(phoneme[,-6], col=c(2,4)[Class], pch=c(1,3)[Class]))
+```
+
+# Tasks
+```{r}
+library(mclust)
+```
+
+## 1. Visualisation
+```{r}
+phoneme_n <- phoneme[phoneme$Class=="Nasal",]
+phoneme_o <- phoneme[phoneme$Class=="Oral",]
+
+# finding which class is bigger
+dim(phoneme_n)
+dim(phoneme_o)
+```
+Nasal is the majority which has 709 rows, oral has 291
+
+```{r}
+da = rbind(phoneme_n[,-6],phoneme_o[,-6])
+pairs(da, col = c(rep(2,nrow(phoneme_n)), rep(4,nrow(phoneme_o))), pch=c(rep(1,nrow(phoneme_n)), rep(3,nrow(phoneme_o))))
+```
+
+# Univariate Density Estimation
+
+## 2. Plot each of the kernel density estimate, by superimposing it on a histogram (with breaks=100), for V1, with the bandwidth values chosen by methods nrd0, ucv, bcv and SJ, respectively
+```{r}
+par(mfrow=c(2,2))
+for(bw in c("nrd0", "ucv", "bcv", "SJ")) {
+   hist(phoneme$V1, freq=FALSE, breaks=100, col="gray80", border="black", main=paste0("h = ", bw), xlab="V1")
+   lines(density(phoneme$V1, bw=bw), col=4, lwd=2)
+}
+```
+
+### Observe and discuss if both overfitting and underfitting can exist for a KDE
+
+Overfitting does occur in a KDE in the example of ucv, bcv and SJ. The lines are almost exactly aligned to the data, so it is too specific to the data (overfitting). Underfitting also occurs in the example for nrd0. The line does not map well to the data, as it does not accurately reach the peak point at around -1. 
+
+## 3. Find the best normal mixture fit to V1 (according to the BIC), in both equal and varying variance subfamilies, with the number of components ranging from 1 to 20
+```{r}
+(r = densityMclust(phoneme$V1, G=1:20, modelNames=c("E","V"))) 
+summary(r)
+plot(r, phoneme$V1, "density", breaks=200, lwd=2) 
+```
+
+### Does it look like a better or worse fit than the best of the KDEs?
+
+It appears very similar to the other KDE's, ucv, bcv and SJ. However there are still some areas that are not accurate and over smoothed. There is an area in the peak which drops sharply, but it is mostly a good fit.
+
+# Multivariate density estimation
+
+## 4. For each of the two classes, find a density estimate in the equal variance subfamily of multivariate normal mixtures, with the number of components ranging from 1 to 9
+```{r}
+(r2 = densityMclust(phoneme_n[, -6], G=1:9, modelNames=c("EEE")))
+summary(r2)
+(r3 = densityMclust(phoneme_o[, -6], G=1:9, modelNames=c("EEE")))
+summary(r3)
+```
+
+For Nasal, the best estimate is (EEE,9) and for Oral, the best estimate is (EEE,8)
+
+### Show each density in a pairwise plot of the data
+```{r}
+plot(r2, phoneme_n[, -6], what="density", col=4, points.col="grey")
+plot(r3, phoneme_o[, -6], what="density", col=4, points.col="grey")
+```
+
+## 5. Repeat Task 4, but for the varying variance subfamily of normal mixtures
+```{r}
+(r4 = densityMclust(phoneme_n[, -6], G=1:9, modelNames=c("VVV")))
+summary(r4)
+(r5 = densityMclust(phoneme_o[, -6], G=1:9, modelNames=c("VVV")))  
+summary(r5)
+```
+For Nasal, the best density estimate is (VVV,9) and for Oral, the best density estimate is (VVV,3)
+
+### Show each density in a pairwise plot of the data
+```{r}
+plot(r4, phoneme_n[, -6], what="density", col=4, points.col="grey")
+plot(r5, phoneme_o[, -6], what="density", col=4, points.col="grey")
+```
+
+# K-means
+
+## 7. With the K-means method, find the clustering results with two clusters. Show the results in a pairwise plot of the data, using different colors and point types for observations of different clusters
+
+```{r}
+# K = 2
+(r6 = kmeans(phoneme[, -6], centers=2))
+da = rbind(phoneme_n[,-6],phoneme_o[,-6])
+pairs(da, col = c(rep(2,max(table(r6$cluster))), rep(4,min(table(r6$cluster)))), pch = c(rep(1,max(table(r6$cluster))), rep(3,min(table(r6$cluster)))))
+```
+
+## 8. Compute the adjusted Rand indices for K=2,…,9 clusters as found by the K-means method, when the given class labels are contrasted
+```{r}
+x = double(8)
+for(k in 2:9) {
+  r = kmeans(phoneme[, -6], centers=k)
+  x[k-1] = adjustedRandIndex(phoneme$Class, r$cluster)
+}
+```
+
+```{r}
+# show list of adjusted Rand index
+x
+```
+
+### Comment on the results
+
+For adjusted Rand indices for K=2,…,9 clusters gradually decreases from 0.26392516 to 0.04906171. The agreement with the true class label decreases as the indices increase.
+
+# Mixture-based clustering
+
+## 9. Using the varying variance subfamily of multivariate normal mixtures, find the clustering results with two clusters
+```{r}
+(r = Mclust(phoneme[,-6], G=2, modelNames="VVV"))
+p <- predict(r)$classification  
+```
+
+### Show the results in a pairwise plot as in Task 7
+```{r}
+da = rbind(phoneme_n[,-6],phoneme_o[,-6])
+pairs(da, col = c(rep(2,max(table(p))), rep(4,min(table(p)))),pch = c(rep(1,max(table(p))), rep(3,min(table(p)))))
+```
+
+### Compute the adjusted Rand indices for K=2,…,9 clusters
+```{r}
+x = double(8)
+for(k in 2:9) {
+  r = Mclust(phoneme[, -6], G=k, modelNames="VVV")
+  x[k-1] = adjustedRandIndex(phoneme$Class, predict(r)$classification)
+}
+x
+```
+
+# Hierarchical Clustering
+
+## 10. Produce a dendrogram of the hierarchical clustering results using the complete and the single linkage method, respectively
+
+### Complete
+```{r}
+d = dist(phoneme[,-6]) 
+cex = 1.5
+# complete linkage, by default
+r_C = hclust(d) 
+plot(r_C, cex.axis=cex, cex.lab=cex, cex.main=cex)   
+```
+
+### Single
+```{r}
+# single linkage
+r_S = hclust(d, method="single")                
+plot(r_S, cex.axis=cex, cex.lab=cex, cex.main=cex) 
+```
+
+### Explain why they look very much different
+
+Complete Linkage tends to produce more compact clusters as it focuses on the larger pairwise observation dissimilarity whereas single linkage uses the smaller ones. This means in single linkage the closest observations are linked first. this explains why the complete dendrogram looks better distributed from a top down view and the single dendrogram looks heavily skewed by it's first link.
+
+## 11. Compute the adjusted Rand indices for K=2,…,9 clusters produced by the complete and the single linkage method
+```{r}
+# Complete linkage
+x = double(8)
+for(k in 2:9) {
+  r = hclust(d)                
+  x[k-1] = adjustedRandIndex(phoneme$Class, cutree(r, k))
+}
+x
+```
+
+```{r}
+# Single linkage
+for(k in 2:9) {
+  r = hclust(d, method="single")               
+  x[k-1] = adjustedRandIndex(phoneme$Class, cutree(r, k))
+}
+x
+```
+
+## 12. Produce the heatmaps for both the complete and single linkage methods
+```{r}
+heatmap(as.matrix(phoneme[, -6]), scale="column", distfun=dist, hclustfun=hclust, margins=c(3,4))
+heatmap(as.matrix(phoneme[, -6]), scale="column", distfun=dist, hclustfun=function(x) hclust(x,method = 'single'), margins=c(3,4))
+```
+
+# SUmmary
+
+In this lab, we looked at various unsupervised learning methods including univariate and multivariate desnity estimation, kmeans clustering, mixture-based clustering and heirachcalclustering. Visualisations were used to manually determine quality and overfitting/underfitting. We looked at how changing the adjusted Rand indices for K=2,…,9 affected these methods then visualized them. We looked at the differences between complete linkage clustering and single linkage clustering and how it affected the dendrograms output appearance. Heatmaps showed this difference as well.
+
+
+
+
